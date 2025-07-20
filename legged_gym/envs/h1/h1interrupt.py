@@ -366,6 +366,8 @@ class H1InterruptRobot(H1Robot):
         return disturb_actions
         
     def calculate_action(self, actions):
+        if isinstance(actions, tuple):
+            actions = actions[0]
         self.actions = actions.clone()
         clip_actions = self.cfg.normalization.clip_actions
         cliped_actions = torch.clip(actions.clone(), -clip_actions, clip_actions).to(self.device)
