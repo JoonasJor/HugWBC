@@ -75,7 +75,7 @@ def play(args):
     env.set_camera(look_at + camera_relative_position, look_at, track_index)
     
     _, _ = env.reset()
-    obs, critic_obs, _, _, _ = env.step(torch.zeros(
+    obs, critic_obs, _, _, _, _ = env.step(torch.zeros(
             env.num_envs, env.num_actions, dtype=torch.float, device=env.device))
 
     timesteps = env_cfg.env.episode_length_s * 500 + 1
@@ -83,7 +83,7 @@ def play(args):
         with torch.inference_mode():
             actions = policy.act_inference(obs, privileged_obs=critic_obs)
 
-            obs, critic_obs, _, _, _ = env.step(actions)
+            obs, critic_obs, _, _, _, _ = env.step(actions)
             look_at = np.array(env.root_states[track_index, :3].cpu(), dtype=np.float64)
             camera_rot = (camera_rot + camera_rot_per_sec * env.dt) % (2 * np.pi)
             h_scale = 1
@@ -108,7 +108,7 @@ def play(args):
             env.disturb_isnoise[:]= True
             env.disturb_rad_curriculum[:] = 1.0
             env.interrupt_mask[:] = env.disturb_masks[:]
-            env.standing_envs_mask[:] = True
+            env.standing_envs_mask[:] = False
             env.commands[env.standing_envs_mask, :3] = 0
 
 if __name__ == '__main__':

@@ -127,7 +127,7 @@ class ActorCritic(nn.Module):
         if masks is not None:
             observations = unpad_trajectories(observations, masks).flatten(0, 1)
         actions_mean = self.actor(observations, **kwargs)
-        return actions_mean, self.actor.z
+        return actions_mean
     
     def evaluate(self, critic_observations, masks=None, **kwargs):
         if masks is not None:

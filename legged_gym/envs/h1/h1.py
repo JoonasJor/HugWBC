@@ -90,7 +90,7 @@ class H1Robot(BaseTask):
         if self.cfg.domain_rand.randomize_control_latency:
             self.delayed_obs_buf.reset(env_idxs, self.obs_buf[:, :self.sensor_delayed_dim])
 
-        obs, privileged_obs, _, _, _  = self.step(torch.zeros(
+        obs, privileged_obs, _, _, _, _  = self.step(torch.zeros(
             self.num_envs, self.num_actions, device=self.device, requires_grad=False))
         return obs, privileged_obs
     
@@ -123,7 +123,7 @@ class H1Robot(BaseTask):
             self.gym.refresh_dof_state_tensor(self.sim)
         self.post_physics_step()
 
-        return self.partial_obs_buf, self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+        return self.partial_obs_buf, self.obs_buf, self.rew_buf, self.reset_buf, self.extras, self.torques
 
     def post_physics_step(self):
         """ check terminations, compute observations and rewards
@@ -326,6 +326,17 @@ class H1Robot(BaseTask):
             self.clock_inputs, 
         ), dim=-1)
 
+        """print("base_ang_vel:", self.base_ang_vel.shape)
+        print("projected_gravity:", self.projected_gravity.shape)
+        print("dof_pos:", (self.dof_pos - self.default_dof_pos).shape)
+        print("dof_vel:", self.dof_vel.shape)
+        print("actions:", self.actions.shape)
+        print("commands:", self.commands.shape)
+        print("clock_inputs:", self.clock_inputs.shape)"""
+
+        #print(f"preprocess obs_buf: {self.obs_buf}")
+        #print(f"preprocess obs_buf shape: {self.obs_buf.shape}")
+
         # privileged states
         if self.cfg.env.has_privileged_info:
             friction_range = self.cfg.domain_rand.friction_range
@@ -367,7 +378,7 @@ class H1Robot(BaseTask):
     def add_other_privilege(self):
         pass
 
-    def compute_observations(self, reset_env_ids):
+    def  compute_observations(self, reset_env_ids):
         """ Computes observations
         """
         self._preprocess_obs()
@@ -396,6 +407,10 @@ class H1Robot(BaseTask):
             self.partial_obs_buf, self.atten_mask = self.obs_buf_history.get_obs_tensor_3D()
         else:
             self.partial_obs_buf = partial_obs
+
+        #print(f"partial_obs:\n {np.round(partial_obs.cpu().numpy(), 3)}")
+        #print(f"partial_obs shape: {partial_obs.shape}")
+        
         
     def GetDelayedBodyObservation(self, latency):
         """Get observation that is delayed by the amount specified in latency.
@@ -789,6 +804,7 @@ class H1Robot(BaseTask):
 
             self.clock_inputs[:, 0] = torch.sin(2 * np.pi * foot_indices[0])
             self.clock_inputs[:, 1] = torch.sin(2 * np.pi * foot_indices[1])
+            #print(foot_indices)
         
             # von mises distribution
             kappa = self.cfg.rewards.kappa_gait_probs
