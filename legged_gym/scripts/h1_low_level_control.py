@@ -109,11 +109,18 @@ class LowLevelControl:
                     ,self.low_state.imu_state.rpy[2],"]"
         )
 
-    def LowCmdWriteJointAngles(self, actions):
+    def LowCmdWriteJointTorques(self, torques):
         #print(joint_angles)
+        
+
+
+        # NÄMÄ TÄNNE? self.p_gains[i] = self.cfg.control.stiffness[dof_name] 
+
+
+
         for i in range(H1_NUM_MOTOR):
             ratio = self.time_ / self.duration_
-            self.low_cmd.motor_cmd[i].tau = actions[i]     
+            self.low_cmd.motor_cmd[i].tau = torques[i]     
             self.low_cmd.motor_cmd[i].q = 0 #joint_positions[i]
             self.low_cmd.motor_cmd[i].dq = 0                
             self.low_cmd.motor_cmd[i].kp = self.kp_low_ if self.is_weak_motor(i) else self.kp_high_ 

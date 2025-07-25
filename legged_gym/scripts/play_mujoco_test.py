@@ -160,7 +160,7 @@ def play(args):
             joint_angles: list = actions[0].flatten().tolist()
             joint_angles.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
 
-            h1_ctrl.LowCmdWriteJointAngles(joint_angles)
+            h1_ctrl.LowCmdWriteJointTorques(joint_angles)
 
 if __name__ == '__main__':
     args = get_args()

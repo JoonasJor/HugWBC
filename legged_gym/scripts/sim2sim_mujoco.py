@@ -4,7 +4,7 @@ import time
 import numpy as np
 from collections import deque
 sys.path.append(os.getcwd())
-from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg
+from legged_gym.envs.h1.h1_config import H1Cfg
 import torch 
 import h1_low_level_control as h1
 from phase_clock import PhaseClock
@@ -29,14 +29,37 @@ class Sim2Sim:
         self.h1_ctrl = h1.LowLevelControl()
         self.h1_ctrl.Init()
 
-        default_joint_angles = [
+        # Configs
+        self.cfg = H1Cfg()
+
+        self.command_scales = torch.tensor([
+            self.cfg.normalization.obs_scales.lin_vel,
+            self.cfg.normalization.obs_scales.lin_vel,
+            self.cfg.normalization.obs_scales.ang_vel,
+            self.cfg.normalization.obs_scales.gait_freq_cmd,
+            self.cfg.normalization.obs_scales.gait_phase_cmd,
+            self.cfg.normalization.obs_scales.gait_phase_cmd,
+            self.cfg.normalization.obs_scales.footswing_height_cmd,
+            0.0, 0.0, 0.0, 0.0
+        ], dtype=torch.float, device=self.device)
+
+        self.dof_names = list(self.cfg.init_state.default_joint_angles.keys())
+        self.num_dofs = len(self.dof_names)
+        self.num_actions = self.cfg.env.num_actions
+        
+        """default_joint_angles = [
             0.00,   0.02,   -0.4,   0.8,    -0.4,   # Left leg
            -0.00,  -0.02,   -0.4,   0.8,    -0.4,   # Right Leg
             0.0,                                    # Torso
             0.0,    0.0,    0.0,    0.0,            # Left arm
             0.0,    0.0,    0.0,    0.0             # Right arm
-        ]
-        self.default_dof_pos = torch.tensor(default_joint_angles, dtype=torch.float, device=self.device, requires_grad=False)
+        ]"""
+        
+        self.p_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.d_gains = torch.zeros(self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.custom_torque_limits = torch.zeros(self.num_dofs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.dof_pos = torch.zeros(self.num_dofs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.dof_vel = torch.zeros(self.num_dofs, dtype=torch.float, device=self.device, requires_grad=False)
 
         # Commands
         cmds = (
@@ -53,32 +76,18 @@ class Sim2Sim:
             0.0     # ?
         )
         self.commands = torch.tensor(cmds, dtype=torch.float, device=self.device)
-        self.use_disturb            = False
-        self.disturb_mask           = torch.ones(1,  self.env_action_dim, dtype=torch.bool, device=self.device)
-        self.disturb_isnoise        = torch.tensor([True], device=self.device)
-        self.disturb_rad_curriculum = torch.tensor([1.0], dtype=torch.float32, device=self.device)
-        self.interrupt_mask         = self.disturb_mask.clone()
-        self.standing_mask          = torch.ones(1, dtype=torch.bool, device=self.device)  # ei näin. selvitä miten toimii oikeasti
+        #self.use_disturb            = False
+        #self.disturb_mask           = torch.ones(1,  self.env_action_dim, dtype=torch.bool, device=self.device)
+        #self.disturb_isnoise        = torch.tensor([True], device=self.device)
+        #self.disturb_rad_curriculum = torch.tensor([1.0], dtype=torch.float32, device=self.device)
+        #self.interrupt_mask         = self.disturb_mask.clone()
+        #self.standing_mask          = torch.ones(1, dtype=torch.bool, device=self.device)  # ei näin. selvitä miten toimii oikeasti
         # last action
         self.last_action = torch.zeros(19, dtype=torch.float, device=self.device)
 
-        # timestep
-        sim_cfg = LeggedRobotCfg.sim()
-        self.dt = sim_cfg.dt
+        # Time
+        self.dt = self.cfg.sim.dt
         self.t = 0.0
-
-        # Scales
-        self.obs_scales = LeggedRobotCfg.normalization.obs_scales()
-        self.command_scales = torch.tensor([
-            self.obs_scales.lin_vel,
-            self.obs_scales.lin_vel,
-            self.obs_scales.ang_vel,
-            self.obs_scales.gait_freq_cmd,
-            self.obs_scales.gait_phase_cmd,
-            self.obs_scales.gait_phase_cmd,
-            self.obs_scales.footswing_height_cmd,
-            0.0, 0.0, 0.0, 0.0
-        ], dtype=torch.float, device=self.device)
 
         # phase‐clock for contact targets
         self.clock_gen = PhaseClock(self.dt, device=self.device)
@@ -90,6 +99,34 @@ class Sim2Sim:
         for _ in range(buffer_len):
             self.obs_buffer.append(obs_empty)
 
+        self.init_joints()
+
+    def init_joints(self):
+        # joint positions offsets and PD gains
+        self.default_dof_pos = torch.zeros(self.num_dofs, dtype=torch.float, device=self.device, requires_grad=False)
+        for i in range(self.num_dofs):
+            name = self.dof_names[i]
+            angle = self.cfg.init_state.default_joint_angles[name]
+            self.default_dof_pos[i] = angle
+            found = False
+            for dof_name in self.cfg.control.stiffness.keys():
+                if dof_name in name:
+                    self.p_gains[i] = self.cfg.control.stiffness[dof_name]
+                    self.d_gains[i] = self.cfg.control.damping[dof_name]
+                    self.custom_torque_limits[i] = self.cfg.control.torque_limits[dof_name]
+                    found = True
+            if not found:
+                self.p_gains[i] = 0.
+                self.d_gains[i] = 0.
+                self.custom_torque_limits[i] = 100.
+                if self.cfg.control.control_type in ["P", "V"]:
+                    print(f"PD gain of joint {name} were not defined, setting them to zero")
+        #self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
+
+        #if self.cfg.domain_rand.randomize_gains:
+        #    self.randomized_p_gains, self.randomized_d_gains, \
+        #        self.randomized_motor_strength = self.compute_randomized_gains(self.num_envs)
+            
     def build_single_obs(self, low_state: h1.LowState_) -> torch.Tensor:
         """Returns a 76-D tensor for a single timestep."""
 
@@ -120,19 +157,25 @@ class Sim2Sim:
         base_ang_vel = torch.tensor(low_state.imu_state.gyroscope, dtype=torch.float, device=self.device)
         projected_gravity = torch.tensor(low_state.imu_state.accelerometer, dtype=torch.float, device=self.device)
 
-        dof_pos = [m.q for m in low_state.motor_state]
-        dof_pos.pop(h1.H1JointIndex.kNotUsedJoint)
-        dof_pos = torch.tensor(dof_pos, dtype=torch.float, device=self.device)
+        dof_pos_list = [m.q for m in low_state.motor_state]
+        dof_pos_list.pop(h1.H1JointIndex.kNotUsedJoint)
+        self.dof_pos = torch.tensor(dof_pos_list, dtype=torch.float, device=self.device)
 
-        dof_vel = [m.dq for m in low_state.motor_state]
-        dof_vel.pop(h1.H1JointIndex.kNotUsedJoint)
-        dof_vel = torch.tensor(dof_vel, dtype=torch.float, device=self.device)
+        dof_vel_list = [m.dq for m in low_state.motor_state]
+        dof_vel_list.pop(h1.H1JointIndex.kNotUsedJoint)
+        self.dof_vel = torch.tensor(dof_vel_list, dtype=torch.float, device=self.device)
+
+        print("base_ang_vel shape:", base_ang_vel.shape)
+        print("projected_gravity shape:", projected_gravity.shape)
+        print("dof_pos shape:", self.dof_pos.shape)
+        print("default_dof_pos shape:", self.default_dof_pos.shape)
+        print("dof_vel shape:", self.dof_vel.shape)
 
         proprioception = torch.cat((
-            base_ang_vel * self.obs_scales.ang_vel,
+            base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
             projected_gravity,
-            (dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-            dof_vel * self.obs_scales.dof_vel
+            (self.dof_pos - self.default_dof_pos) * self.cfg.normalization.obs_scales.dof_pos,
+            self.dof_vel * self.cfg.normalization.obs_scales.dof_vel
         ), dim=-1)
 
         clock = self.clock_gen.update(self.commands)
@@ -145,6 +188,24 @@ class Sim2Sim:
         ), dim=-1)
 
         return obs
+    
+    def compute_torques(self, actions):
+        """ Compute torques from actions.
+            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
+            [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
+
+        Args:
+            actions (torch.Tensor): Actions
+
+        Returns:
+            [torch.Tensor]: Torques sent to the simulation
+        """
+        #pd controller
+        actions_scaled = actions * self.cfg.control.action_scale
+        torques = self.p_gains * (actions_scaled + self.default_dof_pos - self.dof_pos) - self.d_gains * self.dof_vel
+        torque_limits = self.custom_torque_limits
+
+        return torch.clip(torques, -torque_limits, torque_limits)
 
     def run(self):
         while True:
@@ -181,14 +242,16 @@ class Sim2Sim:
 
             if self.standing_mask[0]:
                 self.commands[0, :3] = 0.0"""
-
-            # TODO torques = compute_torques(actions)
+            
+            clip_actions = self.cfg.normalization.clip_actions
+            actions_clipped = torch.clip(actions.clone(), -clip_actions, clip_actions).to(self.device)
+            torques = self.compute_torques(actions_clipped)
             
             # send LowCmd
-            actions: list = actions.tolist()
-            actions.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
+            torques: list = torques.tolist()
+            torques.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
 
-            self.h1_ctrl.LowCmdWriteJointAngles(actions)
+            self.h1_ctrl.LowCmdWriteJointTorques(torques)
 
             # advance clock time
             self.t += self.dt

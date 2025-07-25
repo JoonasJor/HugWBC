@@ -188,7 +188,7 @@ def play(args):
             joint_positions: list = env.default_dof_pos[0].flatten().tolist()
             joint_positions.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
             
-            h1_ctrl.LowCmdWriteJointAngles(joint_torques, joint_positions)
+            h1_ctrl.LowCmdWriteJointTorques(joint_torques, joint_positions)
 
 if __name__ == '__main__':
     args = get_args()
