@@ -71,6 +71,7 @@ def parse_sim_params(args, cfg):
     return sim_params
 
 def get_load_path(root, load_run=-1, checkpoint=-1):
+    return "/home/jj/Documents/HugWBC/logs/h1_interrupt/Jul20_01-27-26_/model_20000.pt"
     try:
         runs = os.listdir(root)
         #TODO sort by date to handle change of month

@@ -109,22 +109,14 @@ class LowLevelControl:
                     ,self.low_state.imu_state.rpy[2],"]"
         )
 
-    def LowCmdWriteJointTorques(self, torques):
-        #print(joint_angles)
-        
-
-
-        # NÄMÄ TÄNNE? self.p_gains[i] = self.cfg.control.stiffness[dof_name] 
-
-
-
+    def LowCmdWriteJointTorques(self, torques, stiffness, damping):
         for i in range(H1_NUM_MOTOR):
-            ratio = self.time_ / self.duration_
+            self.low_cmd.motor_cmd[i].mode = 1
             self.low_cmd.motor_cmd[i].tau = torques[i]     
-            self.low_cmd.motor_cmd[i].q = 0 #joint_positions[i]
+            self.low_cmd.motor_cmd[i].q = 0
             self.low_cmd.motor_cmd[i].dq = 0                
-            self.low_cmd.motor_cmd[i].kp = self.kp_low_ if self.is_weak_motor(i) else self.kp_high_ 
-            self.low_cmd.motor_cmd[i].kd = self.kd_low_ if self.is_weak_motor(i) else self.kd_high_ 
+            self.low_cmd.motor_cmd[i].kp = stiffness[i]
+            self.low_cmd.motor_cmd[i].kd = damping[i] 
 
             # tau = Joint target torque  
             # q   = Joint target position
@@ -135,14 +127,36 @@ class LowLevelControl:
         self.low_cmd.crc = self.crc.Crc(self.low_cmd)
         self.lowcmd_publisher_.Write(self.low_cmd)
 
+    def LowCmdWriteJointAngles(self, angles, stiffness, damping):
+
+        for i in range(H1_NUM_MOTOR):
+            self.low_cmd.motor_cmd[i].tau =  0
+            self.low_cmd.motor_cmd[i].q = self.low_state.motor_state[i].q - angles[i]
+            self.low_cmd.motor_cmd[i].dq = 0.0                
+            self.low_cmd.motor_cmd[i].kp = stiffness[i]
+            self.low_cmd.motor_cmd[i].kd = damping[i] 
+
+            # tau = Joint target torque  
+            # q   = Joint target position
+            # dq  = Joint target speed
+            # kp  = Joint stiffness coefficient
+            # kd  = Joint damping coefficient
+
+        self.low_cmd.crc = self.crc.Crc(self.low_cmd)
+
+        for i, cmd in enumerate(self.low_cmd.motor_cmd):
+            print(f"Motor {i}: mode={cmd.mode}, q={cmd.q}, kp={cmd.kp}, kd={cmd.kd}")
+        
+        self.lowcmd_publisher_.Write(self.low_cmd)
+
     def LowCmdWriteZero(self):
         for i in range(H1_NUM_MOTOR):
-            ratio = self.time_ / self.duration_
-            self.low_cmd.motor_cmd[i].tau = 0. 
-            self.low_cmd.motor_cmd[i].q = 0.
-            self.low_cmd.motor_cmd[i].dq = 0. 
-            self.low_cmd.motor_cmd[i].kp = self.kp_low_ if self.is_weak_motor(i) else self.kp_high_
-            self.low_cmd.motor_cmd[i].kd = self.kd_low_ if self.is_weak_motor(i) else self.kd_high_
+            self.low_cmd.motor_cmd[i].mode = 0x01
+            self.low_cmd.motor_cmd[i].tau = 0.0
+            self.low_cmd.motor_cmd[i].q = 0.0
+            self.low_cmd.motor_cmd[i].dq = 0.0
+            self.low_cmd.motor_cmd[i].kp = 0.0
+            self.low_cmd.motor_cmd[i].kd = 0.0
 
         self.low_cmd.crc = self.crc.Crc(self.low_cmd)
         self.lowcmd_publisher_.Write(self.low_cmd)

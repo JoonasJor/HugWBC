@@ -146,6 +146,9 @@ class H1Robot(BaseTask):
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        print(f"{self.base_quat = }")
+        print(f"{self.gravity_vec = }")
+        print(f"{self.projected_gravity = }")
 
         foot_contact = self.contact_forces[:, self.feet_indices, 2] > 1.
         self.bool_foot_contact = torch.logical_or(foot_contact, self.last_contacts)

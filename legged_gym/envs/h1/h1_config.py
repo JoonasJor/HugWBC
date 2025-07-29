@@ -27,25 +27,31 @@ class H1Cfg( LeggedRobotCfg ):
     class init_state( LeggedRobotCfg.init_state ):
         pos = [0.0, 0.0, 1.02] # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
-           'left_hip_yaw_joint' : 0.00,   
-           'left_hip_roll_joint' : 0.02,               
-           'left_hip_pitch_joint' : -0.4,         
-           'left_knee_joint' : 0.8,       
-           'left_ankle_joint' : -0.4,     
-           'right_hip_yaw_joint' : -0.00, 
-           'right_hip_roll_joint' : -0.02, 
-           'right_hip_pitch_joint' : -0.4,                                       
-           'right_knee_joint' : 0.8,                                             
-           'right_ankle_joint' : -0.4,                                     
-           'torso_joint' : 0., 
-           'left_shoulder_pitch_joint' : 0., 
-           'left_shoulder_roll_joint' : 0, 
-           'left_shoulder_yaw_joint' : 0.,
-           'left_elbow_joint'  : 0.,
-           'right_shoulder_pitch_joint' : 0.,
-           'right_shoulder_roll_joint' : 0.0,
-           'right_shoulder_yaw_joint' : 0.,
-           'right_elbow_joint' : 0.,
+            'right_hip_roll_joint' : -0.02, 
+            'right_hip_pitch_joint' : -0.4, 
+            'right_knee_joint' : 0.8,  
+
+            'left_hip_roll_joint' : 0.02,  
+            'left_hip_pitch_joint' : -0.4, 
+            'left_knee_joint' : 0.8,  
+
+            'torso_joint' : 0.,
+
+            'left_hip_yaw_joint' : 0.00,   
+            'right_hip_yaw_joint' : -0.00,
+                    
+            'left_ankle_joint' : -0.4,
+            'right_ankle_joint' : -0.4,
+
+            'right_shoulder_pitch_joint' : 0.,
+            'right_shoulder_roll_joint' : 0.0,
+            'right_shoulder_yaw_joint' : 0.,
+            'right_elbow_joint' : 0.,
+
+            'left_shoulder_pitch_joint' : 0., 
+            'left_shoulder_roll_joint' : 0, 
+            'left_shoulder_yaw_joint' : 0.,
+            'left_elbow_joint'  : 0.,
         }
     
     class control( LeggedRobotCfg.control ):

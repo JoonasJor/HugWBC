@@ -100,8 +100,8 @@ def play(args):
             env.commands[:, 4] = 0.5
             env.commands[:, 5] = 0.5
             env.commands[:, 6] = 0.2
-            env.commands[:, 7] = -0.0
-            env.commands[:, 8] = 0.0
+            env.commands[:, 7] = -0.1
+            env.commands[:, 8] = 0.1
             env.commands[:, 9] = 0.0
             env.use_disturb = True
             env.disturb_masks[:] = True
@@ -110,6 +110,8 @@ def play(args):
             env.interrupt_mask[:] = env.disturb_masks[:]
             env.standing_envs_mask[:] = False
             env.commands[env.standing_envs_mask, :3] = 0
+
+            print(f"{env.commands = }")
 
 if __name__ == '__main__':
     args = get_args()
