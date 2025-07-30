@@ -115,8 +115,8 @@ class LowLevelControl:
             self.low_cmd.motor_cmd[i].tau = torques[i]     
             self.low_cmd.motor_cmd[i].q = 0
             self.low_cmd.motor_cmd[i].dq = 0                
-            self.low_cmd.motor_cmd[i].kp = stiffness[i]
-            self.low_cmd.motor_cmd[i].kd = damping[i] 
+            self.low_cmd.motor_cmd[i].kp = 0#stiffness[i]
+            self.low_cmd.motor_cmd[i].kd = 0#damping[i] 
 
             # tau = Joint target torque  
             # q   = Joint target position
@@ -131,10 +131,10 @@ class LowLevelControl:
 
         for i in range(H1_NUM_MOTOR):
             self.low_cmd.motor_cmd[i].tau =  0
-            self.low_cmd.motor_cmd[i].q = self.low_state.motor_state[i].q - angles[i]
+            self.low_cmd.motor_cmd[i].q = angles[i]
             self.low_cmd.motor_cmd[i].dq = 0.0                
-            self.low_cmd.motor_cmd[i].kp = stiffness[i]
-            self.low_cmd.motor_cmd[i].kd = damping[i] 
+            self.low_cmd.motor_cmd[i].kp = 50
+            self.low_cmd.motor_cmd[i].kd = 0.5
 
             # tau = Joint target torque  
             # q   = Joint target position

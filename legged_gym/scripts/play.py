@@ -57,7 +57,9 @@ def play(args):
     train_cfg.runner.resume = True
     ppo_runner, train_cfg = task_registry.make_alg_runner(
         env=env, name=args.task, args=args, train_cfg=train_cfg)
-    policy = ppo_runner.get_inference_policy(device=env.device)
+    #policy = ppo_runner.get_inference_policy(device=env.device)
+    policy: torch.jit.ScriptModule = torch.jit.load("/home/jj/Documents/HugWBC/logs/h1_interrupt/model.pt").to("cuda")
+    policy.eval()
 
     cfg_eval = {
         "timesteps": (env_cfg.env.episode_length_s) * 500 + 1,
@@ -81,7 +83,7 @@ def play(args):
     timesteps = env_cfg.env.episode_length_s * 500 + 1
     for timestep in tqdm.tqdm(range(timesteps)):
         with torch.inference_mode():
-            actions = policy.act_inference(obs, privileged_obs=critic_obs)
+            actions = policy.act_inference(obs)
 
             obs, critic_obs, _, _, _, _ = env.step(actions)
             look_at = np.array(env.root_states[track_index, :3].cpu(), dtype=np.float64)

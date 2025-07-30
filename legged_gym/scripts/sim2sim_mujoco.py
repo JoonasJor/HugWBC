@@ -59,7 +59,7 @@ class Sim2Sim:
 
         # Commands
         cmds = (
-            2.0,    # Linear velocity X ( m/s )     ( min: -0.6, max: 2.0 )
+            0.0,    # Linear velocity X ( m/s )     ( min: -0.6, max: 2.0 )
             0.0,    # Linear velocity Y ( m/s )     ( min: -0.6, max: 0.6 )
             0.0,    # Angular velocity  ( rad/s )   ( min: -1.0, max: 1.0 )
             1.5,    # Gait frequency    ( Hz )      ( min: 1.5, max: 3.5 )
@@ -72,15 +72,9 @@ class Sim2Sim:
             1.0     # ?
         )
         self.commands = torch.tensor(cmds, dtype=torch.float, device=self.device)
-        #self.use_disturb            = False
-        #self.disturb_mask           = torch.ones(1,  self.env_action_dim, dtype=torch.bool, device=self.device)
-        #self.disturb_isnoise        = torch.tensor([True], device=self.device)
-        #self.disturb_rad_curriculum = torch.tensor([1.0], dtype=torch.float32, device=self.device)
-        #self.interrupt_mask         = self.disturb_mask.clone()
-        #self.standing_mask          = torch.ones(1, dtype=torch.bool, device=self.device)  # ei näin. selvitä miten toimii oikeasti
 
         # Time
-        self.dt = self.cfg.sim.dt * self.cfg.control.decimation
+        self.dt = self.cfg.sim.dt #* self.cfg.control.decimation
 
         # phase‐clock for contact targets
         self.clock_gen = PhaseClock(self.dt, device=self.device)
@@ -92,6 +86,7 @@ class Sim2Sim:
         #for _ in range(self.obs_buffer_len):
         #    self.obs_buffer.append(obs_empty)
 
+        self.h1_ctrl.LowCmdWriteZero()
         self.init_joints()
 
     def init_joints(self):
@@ -109,6 +104,7 @@ class Sim2Sim:
                     self.custom_torque_limits[i] = self.cfg.control.torque_limits[dof_name]
                     found = True
             if not found:
+                print(f"dof_name not found: {dof_name}")
                 self.joint_stiffness[i] = 0.
                 self.joint_damping[i] = 0.
                 self.custom_torque_limits[i] = 100.
@@ -150,25 +146,23 @@ class Sim2Sim:
         #for joint_name, angle in self.cfg.init_state.default_joint_angles.items():
         #    motor_index = joint_name_to_index[joint_name]
         #    angles[motor_index] = angle
-        self.h1_ctrl.LowCmdWriteZero()
-
+        
         angles = self.default_dof_pos.cpu().numpy()
         angles = np.insert(angles, h1.H1JointIndex.kNotUsedJoint, 0.0)
 
-        #angles = np.zeros(20)
-        #angles[0] = -0.02
-        
         stiffness = self.joint_stiffness.cpu().numpy()
-        stiffness = np.insert(stiffness, h1.H1JointIndex.kNotUsedJoint, 0.0)
+        stiffness = np.insert(stiffness, h1.H1JointIndex.kNotUsedJoint, 100.0)
 
         damping = self.joint_damping.cpu().numpy()
-        damping = np.insert(damping, h1.H1JointIndex.kNotUsedJoint, 0.0)
+        damping = np.insert(damping, h1.H1JointIndex.kNotUsedJoint, 2.0)
 
         print(f"{angles = }")
         print(f"{stiffness = }")
         print(f"{damping = }")
 
-        while True:
+        # TEST
+        #while True:
+        for _ in range(500):
             self.h1_ctrl.LowCmdWriteJointAngles(angles, stiffness, damping)
 
             low_state = self.h1_ctrl.low_state
@@ -176,8 +170,9 @@ class Sim2Sim:
             for i, motor in enumerate(low_state.motor_state):
                 print(f"motor {i} - q: {motor.q}")
             print()
-
-        sys.exit()
+            time.sleep(self.dt)
+        #sys.exit()
+        # TEST
             
     def build_single_obs(self, low_state: h1.LowState_) -> torch.Tensor:
         """Returns a 76-D tensor for a single timestep."""
@@ -262,7 +257,7 @@ class Sim2Sim:
         torques = self.joint_stiffness * (actions_scaled + self.default_dof_pos - self.dof_pos) - self.joint_damping * self.dof_vel
         torque_limits = self.custom_torque_limits
 
-        #torques *= 0.5
+        torques *= 0.75
 
         return torch.clip(torques, -torque_limits, torque_limits)
 
@@ -292,43 +287,35 @@ class Sim2Sim:
                 actions = self.policy.act_inference(obs_batch).squeeze(0)
             self.last_action = actions.clone()
             
-            """# Upper‐body disturbances
-            if self.use_disturb:
-                # assume arm joints indices: e.g. 10–17
-                arm_joints = list(range(10, 18))
-                for j in arm_joints:
-                    if self.disturb_mask[0, j] and self.disturb_isnoise:
-                        # sample random torque scaled by curriculum radius
-                        tau = (2*torch.rand(1, device=self.device)-1.0) \
-                            * self.disturb_rad_curriculum
-                        # add to your PD feedforward tau_ff
-                        tau_ff[j] += tau.item()
-
-            if self.standing_mask[0]:
-                self.commands[0, :3] = 0.0"""
+            # TODO Upper body disturbances
             
             clip_actions = self.cfg.normalization.clip_actions
             actions_clipped = torch.clip(actions.clone(), -clip_actions, clip_actions).to(self.device)
             torques = self.compute_torques(actions_clipped)
-            #print(torques)
-            #print(self.commands)
             
             # send LowCmd
-            torques = torques.tolist()
-            torques.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
-            stiffness = self.joint_stiffness.tolist()
-            stiffness.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
-            damping = self.joint_damping.tolist()
-            damping.insert(h1.H1JointIndex.kNotUsedJoint, 0.0)
+            torques = torques.cpu().numpy()
+            torques = np.insert(torques, h1.H1JointIndex.kNotUsedJoint, 0.0)
 
-            for _ in range(self.cfg.control.decimation):
-                self.h1_ctrl.LowCmdWriteJointTorques(torques, stiffness, damping)
+            stiffness = self.joint_stiffness.cpu().numpy()
+            stiffness = np.insert(stiffness, h1.H1JointIndex.kNotUsedJoint, 100.0)
+
+            damping = self.joint_damping.cpu().numpy()
+            damping = np.insert(damping, h1.H1JointIndex.kNotUsedJoint, 2.0)
+
+            for i in range(len(torques)):
+                print(f"motor {i}: {torques[i]}")
+
+            #for _ in range(self.cfg.control.decimation):
+            self.h1_ctrl.LowCmdWriteJointTorques(torques, stiffness, damping)
+            
+
+            #sys.exit()
 
             elapsed = time.perf_counter() - start
             if self.dt - elapsed > 0.0:
-                print(f"{self.dt - elapsed = }")
+                #print(f"{self.dt - elapsed = }")
                 time.sleep(self.dt - elapsed)
-
 
 if __name__ == "__main__":
     controller = Sim2Sim(
